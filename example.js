@@ -17,7 +17,7 @@ server.listen(0, function(){
     var register = require('./index')({
         service: service,
         port: port,
-        checkPath: '/',
+        // checkPath: '/',
         host: '127.0.0.1'
     })
 

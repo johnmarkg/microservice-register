@@ -8,7 +8,10 @@
         port: 59000
     }];
     var port;
-    var service
+    var service;
+    var checkPath;
+
+    var registered = false;
 
     var registerCheckIntervalOriginal = 1000 * 1;
     var registeredCheckInterval = 1000 * 60
@@ -19,6 +22,9 @@
 
         if(config.routers){
             routers = config.routers
+        }
+        if(config.checkPath){
+            checkPath = config.checkPath
         }
         port = config.port
         service = config.service
@@ -37,15 +43,29 @@
 
         console.info('routerRegister: ' + JSON.stringify(routerConfig))
 
+        var path =  '/router/register/' + service  + '/' + port;
+        if(checkPath){
+            path += '?checkPath='+checkPath
+        }
+
         var req = http.request({
             method: 'POST',
             port: routerConfig.port || 5050,
             host: routerConfig.host || '127.0.0.1',
-            path: '/router/register/' + service  + '/' + port
+            path: path,
+            query : {
+
+            }
         }, function(res){
 
             if(res.statusCode == 200){
-                console.info('registration succesfull: ' + JSON.stringify(routerConfig))
+
+                if(!registered){
+                    console.info('registration succesfull: ' + JSON.stringify(routerConfig))
+                }
+                registered = true;
+
+
                 registerCheckIntervalCurrent = 0
                 setTimeout(function(){
                     routerRegister(port, routerConfig)
@@ -69,6 +89,8 @@
     }
 
     function reRegister(port, routerConfig){
+        console.info('trying to register with router: ' + JSON.stringify(routerConfig))
+        registered = false;
         if(!registerCheckIntervalCurrent){
             registerCheckIntervalCurrent = registerCheckIntervalOriginal
         }
