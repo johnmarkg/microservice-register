@@ -14,7 +14,7 @@ server.listen(0, function(){
     port = this.address().port
     console.info('port: ' + port)
 
-    var register = require('./index')({
+    require('./index')({
         service: service,
         port: port,
         // checkPath: '/',

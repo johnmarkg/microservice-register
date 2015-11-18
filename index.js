@@ -1,106 +1,155 @@
 (function () {
 
-    var http = require('http');
-    var debug = require('debug')('microservice-register')
+    // var http = require('http');
+    var util = require('util');
+    var events = require('events');
+    var request = require('superagent')
+    // var url = require('url')
+    // var debug = require('debug')('microservice-register')
 
-    var routers = [{
-        host: '127.0.0.1',
-        port: 59000
-    }];
-    var port;
-    var service;
-    var checkPath;
 
-    var registered = false;
-
-    var registerCheckIntervalOriginal = 1000 * 1;
-    var registeredCheckInterval = 1000 * 60
-    var registerCheckIntervalCurrent = registerCheckIntervalOriginal
 
     function Register(config){
+
+        events.EventEmitter.call(this)
+
+        this.routers = [{
+            host: '127.0.0.1',
+            port: 59000
+        }];
+
         if(!config){ config = {}; }
 
+        this.registerPath = '/router/register/';
+
+        this.registered = false;
+
+        this.registerCheckIntervalOriginal = config.checkInterval || (1000 * 1);
+        this.registeredCheckInterval = config.registeredCheckInterval || 1000 * 60
+        this.registerCheckIntervalCurrent = this.registerCheckIntervalOriginal
+
+
         if(config.routers){
-            routers = config.routers
+            this.routers = config.routers
         }
         if(config.checkPath){
-            checkPath = config.checkPath
+            this.checkPath = config.checkPath
         }
-        port = config.port
-        service = config.service
+        if(config.registerPath){
+            this.registerPath = config.registerPath
+            if(!this.registerPath.match(/\/$/)){
+                this.registerPath += '/'
+            }
+            if(!this.registerPath.match(/^\//)){
+                this.registerPath = '/' + this.registerPath
+            }
+        }
+        if(config.timeout){
+            this.timeout = config.timeout
+        }
+        this.port = config.port
+        this.service = config.service || 'service'
+        this.aliases = config.alias || config.aliases
 
-        // routerRegister(port, routers);
-        routers.forEach(function(config){
-            routerRegister(port, config);
+
+        var t = this
+
+        this.routers.forEach(function(routerConfig){
+            t.routerRegister(routerConfig);
         })
+
+
+
+        return this;
+
+
     }
 
-    module.exports = function(config){
+    util.inherits(Register, events)
+
+    exports = module.exports = function(config){
+        console.info('NEW')
         return new Register(config)
     }
 
-    function routerRegister(port, routerConfig){
+    // use this to get a new, non cached object
+	// Register.prototype.fresh = function(config) {
+	// 	return new Register(config);
+	// };
 
-        console.info('routerRegister: ' + JSON.stringify(routerConfig))
 
-        var path =  '/router/register/' + service  + '/' + port;
-        if(checkPath){
-            path += '?checkPath='+checkPath
+    Register.prototype.routerRegister = function(routerConfig){
+    // function routerRegister(port, routerConfig, aliases){
+
+        var t = this;
+        if(!t.registered){
+            console.info('routerRegister: ' + JSON.stringify(routerConfig))
         }
 
-        var req = http.request({
-            method: 'POST',
-            port: routerConfig.port || 5050,
-            host: routerConfig.host || '127.0.0.1',
-            path: path,
-            query : {
+        var path =  t.registerPath + t.service  + '/' + t.port;
 
+        var query = {};
+
+        var url = 'http://' + routerConfig.host || '127.0.0.1';
+        if(routerConfig.port){
+            url += ':' + routerConfig.port
+        }
+        url += path
+
+        if(t.checkPath){
+            query.checkPath = t.checkPath
+        }
+
+        if(t.aliases){
+            query.alias = t.aliases
+        }
+
+        var req = request
+            .post(url)
+            .query(query)
+        if(t.timeout){
+            req.timeout(t.timeout)
+        }
+        req.end(function(err){
+            // catches 500 and 400
+            if(err){
+                console.log('problem with request: ' + err.message);
+                t.emit('failed', err)
+                t.reRegister(routerConfig)
+                return
             }
-        }, function(res){
 
-            if(res.statusCode == 200){
-
-                if(!registered){
-                    console.info('registration succesfull: ' + JSON.stringify(routerConfig))
-                }
-                registered = true;
-
-
-                registerCheckIntervalCurrent = 0
-                setTimeout(function(){
-                    routerRegister(port, routerConfig)
-                }, registeredCheckInterval)
-
+            if(!t.registered){
+                console.info('registration succesfull: ' + JSON.stringify(routerConfig))
+                t.emit('registered')
             }
-            else{
-                reRegister(port, routerConfig)
-                // setTimeout(function(){
-                //     routerRegister(port, routerConfig)
-                // }, 1000 * 3)
-            }
-        })
+            t.registered = true;
 
-        req.end();
-        req.on('error', function(e) {
-            console.log('problem with request: ' + e.message);
-            reRegister(port, routerConfig)
+            t.registerCheckIntervalCurrent = 0
+            setTimeout(function(){
+                t.routerRegister(routerConfig)
+            }, t.registeredCheckInterval)
 
         });
     }
 
-    function reRegister(port, routerConfig){
+    Register.prototype.reRegister = function(routerConfig){
+
         console.info('trying to register with router: ' + JSON.stringify(routerConfig))
-        registered = false;
-        if(!registerCheckIntervalCurrent){
-            registerCheckIntervalCurrent = registerCheckIntervalOriginal
+
+        var t = this;
+        t.registered = false;
+
+        if(!t.registerCheckIntervalCurrent){
+            t.registerCheckIntervalCurrent = t.registerCheckIntervalOriginal
         }
-        else if(registerCheckIntervalCurrent < registeredCheckInterval){
-            registerCheckIntervalCurrent += 1000
+        else if(t.registerCheckIntervalCurrent < t.registeredCheckInterval){
+            t.registerCheckIntervalCurrent += 1000
         }
 
         setTimeout(function(){
-            routerRegister(port, routerConfig)
-        }, registerCheckIntervalCurrent)
+            t.routerRegister(routerConfig)
+        }, t.registerCheckIntervalCurrent)
     }
 
 }).call(this)
